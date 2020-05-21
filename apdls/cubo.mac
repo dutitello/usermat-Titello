@@ -1,0 +1,145 @@
+!
+! TESTE DE PLASTICIDADE - COMPRESSÃO UNIAXIAL
+!
+
+
+
+/CLEAR,NOSTART
+KEYW,PR_SET,1
+KEYW,PR_STRUC,1
+/GO
+
+
+! Modelo do Concreto
+MODCONC = 1 !ARG1
+
+! Dimensões em cm
+b = 1
+h = 1 
+l = 1
+
+
+/PREP7
+! Elementos Plano de 8 nós
+ET,1,PLANE183   
+KEYOPT,1,1,0
+KEYOPT,1,3,3
+KEYOPT,1,6,0
+R,1,b
+
+! Materiais
+!MPTEMP,,,,,,,,  
+!MPTEMP,1,0  
+!MPDATA,EX,1,,3030   
+!MPDATA,PRXY,1,,0.2  
+
+TB,USER,1,1,30
+TBTEMP,0
+TBDATA,,MODCONC,3.8,0.29,3360,0.2    ! modelo, fcm, fct, Eci, v
+TB,STATE,1,,100
+TBDATA,72,0.001
+
+!TBDATA,80,1
+!USR1
+
+! Malha
+BLC4,0,0,l,h
+TYPE,1
+MAT,1
+REAL,1
+ESYS,0
+LESIZE,1,,,1,,,,,1
+LESIZE,2,,,1,,,,,1
+LESIZE,3,,,1,,,,,1
+LESIZE,4,,,1,,,,,1
+MSHAPE,0,2D
+MSHKEY,1
+AMESH,1
+
+! Visualização
+/VIEW,1,1,2,3   
+/ANG,1  
+/REP,FAST   
+/SHRINK,0   
+/ESHAPE,1   
+/EFACET,1   
+/RATIO,1,1,1
+/CFORMAT,32,0   
+/REPLOT 
+
+! Condições de contorno
+NSEL,S,LOC,X,0
+D,ALL,UX,0
+NSEL,R,LOC,Y,h/2
+D,ALL,UY,0
+ALLSEL
+
+
+
+!
+! SOLVER
+!
+/SOLU
+ANTYPE,0,NEW ! Análise do tipo estática
+NLGEOM,ON ! Não linearidade geométrica
+NROPT,FULL,,ON ! Newton Raphson completo
+EQSLV,SPAR,,0, ! Solver Spars Direto
+AUTOTS,ON ! Passo de carga automático
+ERESX,NO ! Copia os resultados dos pontos de integração para os nós
+PSCONTROL,ALL,OFF ! Paralelização
+CNVTOL,F,,0.02,2,0.02
+CNVTOL,U,,0.02,2,0.02
+NCNV,2,3000,,,,
+OUTRES,ALL,ALL
+TIME,1
+
+passos = 250
+neq = 500
+NSUBS,passos,passos,passos
+NEQIT,neq
+
+
+! P1
+TIME,
+NSEL,S,LOC,X,l
+D,ALL,UX,-0.0040
+ALLSEL,ALL
+SOLVE
+!USR1
+
+
+/POST26
+NUMVAR,200
+! Nós 2 e 4: Inf e Sup extremo
+! Nós 1 e 6: Inf e Sup engaste
+!ESOL,NVAR,ELEM,NODE,Item,Comp,Name
+!ADD,IR,IA,IB,IC,Name,,,FACTA,FACTB,FACTC
+!PROD,IR,IA,IB,IC,Name,--,--,FACTA,FACTB,FACTC
+! Invertendo sinal do diagrama ;D
+
+! Tensão X e Y
+ESOL,2,1,4,S,X
+ESOL,3,1,4,S,Y
+PROD,2,2,,,,,,-1
+PROD,3,3,,,,,,-1
+
+! Def totalX(8)=PlastX(6)+ElastX(7)
+ESOL,6,1,4,EPEL,X
+ESOL,7,1,4,EPPL,X
+ADD,8,6,7,,,,,-1,-1
+
+! Def totalY(12)=PlastY(10)+ElastY(11)
+ESOL,11,1,4,EPEL,Y
+ESOL,10,1,4,EPPL,Y
+ADD,12,10,11,,,,,-1,-1
+
+! Desloc 
+NSOL,15,4,U,X
+
+
+/AXLAB,Y,Tensao (kN/cm2)
+/AXLAB,X,Deformacao
+
+XVAR,8  
+PLVAR,2
+

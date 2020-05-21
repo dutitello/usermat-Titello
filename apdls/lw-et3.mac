@@ -1,0 +1,644 @@
+!----------------------------------------
+!
+!   Script para viga T
+!
+!   Construída sobre a ET4 de Leonhardt e Walther
+!
+!   Unidades: kN e cm
+!       
+!----------------------------------------
+
+
+/CLEAR,NOSTART
+KEYW,PR_SET,1
+KEYW,PR_STRUC,1
+/GO
+
+
+!================================================================
+! Dimensões da viga
+!
+! Seção
+! -Mesa superior
+bms = 30 ! Largura da mesa superior
+hms = 7.5 ! Altura da mesa superior
+nhms = 1 ! Número de elementos na altura da mesa superior
+
+! -Alma
+ba = 10  ! Largura da alma
+ha = 17.5 ! Altura da alma
+nha = 3 ! Número de elementos na altura da alma
+
+! -Mesa inferior
+bmi = 10 ! Largura da mesa inferior
+hmi = 10 ! Altura da mesa inferior
+nhmi = 1 ! Número de elementos na altura da mesa inferior
+
+! Comprimento
+l = 150  ! Comprimento (meia viga descontando balanço anterior)
+nl = 5 ! Número de elementos no comprimento (em l)
+lant = 20  ! Comprimento antes do apoio (balanço)
+nlant = 1 ! Número de elementos no comprimento do balanço
+
+! Calcula alura total
+h = hms + ha + hmi
+
+!----------------------------------------------------------------
+! Armaduras longitudinais
+!
+! Número de camadas
+ncam = 3 
+*DIM,ARML,,3,ncam
+! Áreas de aço, distância do topo, matId
+!   Cada coluna é uma camada sendo linha1=dist / linha2=As / linha3=matId
+!       Preencher assim: ARML(1, i) = d_i, As_i, matId_i
+ARML(1, 1) = 32.0,  6.28, 2 ! inf: 2 barras de 16mm
+ARML(1, 2) = 29.0,  6.28, 2 ! inf: 2 barras de 10mm
+ARML(1, 3) =  3.0,  1.01, 3 ! sup: 2 barras de 10mm
+
+!----------------------------------------------------------------
+! Armadura transversal
+!
+! Numero de trechos com diferentes configurações
+! Originalmente o código começa as barras longitudinais em -lant e os
+! estribos sobre o apoio, para por estribos no balanço basta usar comp=-lant
+! no primeiro trecho.
+ntrech = 3
+*DIM,ARMT,,4,ntrech
+! Comprimento do trecho, espaçamento e área de aço da barra (uma unica barra ou 2 barras caso tenha 2 ramos)
+!   Cada coluna é uma camada sendo linha1=comp, linha2=esp, linha3=Ast, linha4=matId
+!       Preencher assim: ARMT(1, i) = comp_i, esp_i, Ast_i, matId_i
+!ARMT(1, 1) = -20, 10, 0.000, 3   ! 10 cm  antes sem
+!ARMT(1, 2) =  50,  8, 0.565, 3   ! +10+40 com
+!ARMT(1, 3) =  25, 10, 0.000, 3   ! +25    sem
+ARMT(1, 1) = -14, 10, 0.000, 4   ! Regride 14 cm (sem armadura)
+ARMT(1, 2) =  20,  5, 0.565, 4   ! Durante 20 cm coloca barras a cada  5 cm
+ARMT(1, 3) =  99, 11, 0.565, 4   ! Durante 99 cm coloca barras a cada 11 cm
+
+!----------------------------------------------------------------
+! Materiais:
+!
+! Concreto:
+MODCONC = 3 ! Modelo de concreto: 1=Ottosen, 2=WW, 3=WW c/ Fibras, 0=Elastico
+fcm = 2.42
+Eci = 2150*fcm**(1/3)*.9
+fct = 0.03*(fcm*10-8)**(2/3)*.9
+vc  = 0.20
+
+!
+! mat#2 - Armadura Inferior
+Es2 = 19500
+fy2 = 42.8
+vs2 = 0.30
+Hs2 = 0.15*fy2/(0.01-0.85*fy2/Es2)
+fy2 = 0.85*fy2
+!
+! mat#3 - Armadura Superior
+Es3 = Es2
+fy3 = 46.5
+vs3 = vs2
+Hs3 = 0.15*fy3/(0.01-0.85*fy3/Es3)
+fy3 = 0.85*fy3
+!
+! mat#4 - Armadura Transversal 
+Es4 = 20000
+fy4 = 32.0
+vs4 = vs2
+Hs4 = 0.0
+!
+
+!----------------------------------------------------------------
+! Carga aplicada
+!
+TC = 1  ! Tipo: 1=Carga, 2=Desloc
+valF = -150  ! Carga a ser aplicada, se TC=1
+valD = -1.1 ! Deslocamento a ser aplicado, se TC=2 
+locApr = 105
+locC = NINT(locApr/(l/(nl*2)))*l/(nl*2) ! Aproxima local de um nó para carga (nl*2 pq tem 3 nós p/ face)
+!----------------------------------------------------------------
+! 
+!
+
+
+!----------------------------------------------------------------
+! Controle de passos e iterações do solver
+!
+minpassos1 = 250    ! Numero de passos até 1/4 da força
+minpassos2 = 250!250 ! Numero de passos após
+passos1 = 5*minpassos1
+passos2 = 5*minpassos2
+neq = 250
+tolerro1 = 0.15!0.20 ! Tolerancia até 1/4 da força
+tolerro2 = 0.03!0.10 ! Tolerancia depois
+relfis = 0
+ldpred = 0
+
+!================================================================
+
+
+/PREP7
+
+!================================================================
+! Elementos
+!
+! Plano de 8 nós com espessura
+ET,1,PLANE183   
+KEYOPT,1,1,0
+KEYOPT,1,3,3
+KEYOPT,1,6,0
+
+! Cria RealConstants para larguras
+R,1,bms ! Largura da mesa superior
+R,2,ba ! Largura da alma
+R,3,bmi ! Largura da mesa inferior
+
+! Mesh200 para criar armaduras
+ET,2,MESH200
+KEYOPT,1,1  ! Linha 2D de 3 nós para elemento 2D de 3 nós
+!================================================================
+
+
+!================================================================
+! Materiais
+!
+! mat#1 - Concreto
+*IF,MODCONC,NE,0,THEN
+    TB,USER,1,1,30
+    TBTEMP,0
+    TBDATA,,MODCONC,fcm,fct,Eci,vc ! modelo, fcm, fct, Eci, v
+    TBDATA,6,100,0.0001,5,4,0.04 !Fibras fake
+    TB,STATE,1,,100
+
+    !TBDATA,70,-1
+    !TBDATA,72,fy2/Es2
+    TBDATA,72,0.001
+
+    ! Define região de aplicação do TS
+    !TBDATA,75, 0*22.5, 0,0, 0,0
+
+    ! LC para fibras falsas
+    TBDATA,88,15
+
+    ! Salva fissuras
+    *IF,relfis,EQ,1,THEN
+        ! Abre arquivo
+        USR1
+        ! Sinaliza para gravar
+        TBDATA,80,1
+    *ENDIF
+
+*ELSE
+    MPTEMP,1,0
+    MPDATA,EX,1,,Eci
+    MPDATA,PRXY,1,,vc
+*ENDIF
+
+
+! Armaduras
+! mat#2 - Armadura Longitudinal - Inf 
+MPTEMP,1,0
+MPDATA,EX,2,,Es2
+MPDATA,PRXY,2,,vs2
+TB,BISO,2,1,2
+TBTEMP,0
+TBDATA,,fy2,Hs2
+
+! mat#3 - Armadura Longitudinal - Sup
+MPTEMP,1,0
+MPDATA,EX,3,,Es3
+MPDATA,PRXY,3,,vs3
+TB,BISO,3,1,2
+TBTEMP,0
+TBDATA,,fy3,Hs3
+
+! mat#4 - Armadura Transversal
+MPTEMP,1,0
+MPDATA,EX,4,,Es4
+MPDATA,PRXY,4,,vs4
+TB,BISO,4,1,2
+TBTEMP,0
+TBDATA,,fy4,Hs4
+
+
+!================================================================
+
+
+!================================================================
+! Cria concreto e malha
+!
+! Cria áreas
+! -Mesa superior
+RECTNG, -lant, 0, hmi+ha, hmi+ha+hms 
+RECTNG, 0, l, hmi+ha, hmi+ha+hms 
+
+! -Alma
+RECTNG, -lant, 0, hmi, hmi+ha
+RECTNG, 0, l, hmi, hmi+ha
+
+! -Mesa inferior
+RECTNG, -lant, 0, 0, hmi
+RECTNG, 0, l, 0, hmi
+
+! Divisões horizontais (nl)
+! -Viga
+LSEL,S,TAN2,Y,0
+LSEL,R,LOC,X,0,l
+LESIZE,ALL,,,nl,,,,,1
+
+! -Balanço Antes
+LSEL,S,TAN2,Y,0
+LSEL,R,LOC,X,-lant,0
+LESIZE,ALL,,,nlant,,,,,1
+
+
+! Divisões verticais
+! -Mesa superior
+LSEL,S,TAN2,X,0
+LSEL,R,loc,Y,hmi+ha, hmi+ha+hms
+LESIZE,ALL,,,nhms,,,,,1
+
+! -Alma
+LSEL,S,TAN2,X,0
+LSEL,R,loc,Y,hmi, hmi+ha
+LESIZE,ALL,,,nha,,,,,1
+
+! -Mesa inferior
+LSEL,S,TAN2,X,0
+LSEL,R,loc,Y, 0, hmi
+LESIZE,ALL,,,nhmi,,,,,1
+
+! Seleciona tudo 
+ALLSEL
+
+! Merge
+NUMMRG,KP
+
+! Cria malha
+! -Padrão
+TYPE,1
+MAT,1
+ESYS,0
+MSHAPE,0,2D
+MSHKEY,1
+
+! -Mesa superior
+ASEL,S,loc,Y, hmi+ha, hmi+ha+hms
+REAL,1
+AMESH,ALL
+
+! -Alma
+ASEL,S,loc,Y, hmi, hmi+ha
+REAL,2
+AMESH,ALL
+
+! -Mesa inferior
+ASEL,S,loc,Y, 0, hmi
+REAL,3
+AMESH,ALL
+
+! Merge
+ALLSEL
+NUMMRG,NODE
+NUMCMP,NODE
+
+!----------------------------------------------
+! Armadura Longitudinal - Seções 100-150
+!
+*DO,ii,1,ncam
+    ! Pega dados na matriz de armaduas
+        ! Como o eixo de referencia é pra cima e as armaduras usam o eixo para baixo faz d=h-d
+    dis = h - ARML(1, ii)
+    Asl = ARML(2, ii)
+    matId = ARML(3, ii)
+
+    *IF,Asl,EQ,0,THEN
+        *CYCLE
+    *ENDIF
+
+    ! Determina largura do elemento onde está armadura
+    *IF,dis,LE,hmi,THEN
+        blocal = bmi
+    *ELSEIF,dis,LE,hmi+ha,THEN
+        blocal = ba
+    *ELSE
+        blocal = bms
+    *ENDIF
+
+    ! Cria seção de reforço da camada
+    SECTYPE,(99+ii),REINF,SMEAR
+    SECDATA,matId,Asl,blocal,,,MESH
+    ! Cria linha para gerar reforço
+    K,99+(2*ii-1),-lant,dis
+    K,99+(2*ii  ),l,dis
+    L,99+(2*ii-1),99+(2*ii)
+    ! Atributos de malha
+    SECNUM,(99+ii)
+    TYPE,2
+    MAT,matId
+    ! Seleciona linha criada
+    LSEL,S,LOC,X,-lant,l
+    LSEL,R,LOC,Y,dis  
+    ! Cria malha nos elementos
+    ESIZE,,1
+    LMESH,ALL
+*ENDDO
+! Cria reforços - não sei pq tem que fazer dois loops, em um só não funcinou (WTF)
+*DO,ii,1,ncam
+    ! Pega materiais na matriz de armaduas
+    Asl = ARML(2, ii)
+    matId = ARML(3, ii)
+    
+    *IF,Asl,EQ,0,THEN
+        *CYCLE
+    *ENDIF
+
+    ! Aplica reforço
+    ESEL,S,MAT,,1
+    ESEL,A,SEC,,(99+ii)
+    MAT,matId
+    EREINF
+*ENDDO
+
+
+!----------------------------------------------
+! Armadura Transversal - Seções 200-500 - Nós 200++
+!   Aqui são 3 trechos verticais pq a armadura no elemento 
+!   plano depende da espessura.
+!   
+! Variável para acumular comprimento dos trechos anteriores
+compac = 0
+jj = 0
+*DO,ii,1,ntrech
+    ! Pega valores na matriz de armaduras
+    compt = ARMT(1, ii)
+    esp   = ARMT(2, ii)
+    Ast   = ARMT(3, ii)
+    matId = ARMT(4, ii)
+
+    ! Inicio do trecho
+    compi = compac
+
+    ! Apenas na primeira vez coloca estribo na ponta inicial
+    !  isso evita estribos sobrepostos
+    *IF,jj,GT,0,THEN
+        compi = compi + esp
+    *ENDIF
+
+    ! Acumula comprimento (fim do trecho)
+    compac = (compac + compt)
+
+    *IF,Ast,EQ,0,THEN
+        *CYCLE
+    *ENDIF
+
+    ! Cria linhas com estribos pertencentes ao trecho
+    ! Para evitar pegar linhas da área de concreto 
+    !   define altura como 1.25h e depois seleciona 
+    !   apenas se l=1.25h.
+    ! Cria tres linhas para as tres espessuras
+    *DO,xx,compi,compac,esp
+        jj = jj + 1 ! Contador para kpts
+        ! Mesa superior
+        K,200+(2*jj-1),xx,hmi+ha
+        K,200+(2*jj  ),xx,hmi+ha+1.25*hms
+        L,200+(2*jj-1),200+(2*jj)
+        ! Alma
+        K,300+(2*jj-1),xx,hmi
+        K,300+(2*jj  ),xx,hmi+1.25*ha
+        L,300+(2*jj-1),300+(2*jj)
+        ! Mesa inferior
+        K,400+(2*jj-1),xx,0
+        K,400+(2*jj  ),xx,1.25*hmi
+        L,400+(2*jj-1),400+(2*jj)
+    *ENDDO
+
+    ! Cria seções de reforço dos trechos
+    ! Mesa superior
+    SECTYPE,(200+ii),REINF,SMEAR
+    SECDATA,matId,Ast,bms,,,MESH   
+    ! Alma
+    SECTYPE,(300+ii),REINF,SMEAR
+    SECDATA,matId,Ast,ba,,,MESH
+    ! Mesa inferior
+    SECTYPE,(400+ii),REINF,SMEAR
+    SECDATA,matId,Ast,bmi,,,MESH
+
+    ! Atributos padrões da malha
+    TYPE,2
+    MAT,matId
+
+    ! Seleciona e malha trecho da mesa superior
+    SECNUM,(200+ii)
+    LSEL,S,LOC,X,compi,compac
+    LSEL,R,LOC,Y,hmi+ha,hmi+ha+1.25*hms
+    LSEL,U,EXT
+    LSEL,R,LENGTH,,1.25*hms
+    LSEL,R,TAN2,X,0
+    ESIZE,,1
+    LMESH,ALL
+    ! Seleciona e malha trecho da alma
+    SECNUM,(300+ii)
+    LSEL,S,LOC,X,compi,compac
+    LSEL,R,LOC,Y,hmi,hmi+1.25*ha
+    LSEL,U,EXT
+    LSEL,R,LENGTH,,1.25*ha
+    LSEL,R,TAN2,X,0
+    ESIZE,,1
+    LMESH,ALL
+    ! Seleciona e malha trecho da mesa inferior
+    SECNUM,(400+ii)
+    LSEL,S,LOC,X,compi,compac
+    LSEL,R,LOC,Y,0,1.25*hmi
+    LSEL,U,EXT
+    LSEL,R,LENGTH,,1.25*hmi
+    LSEL,R,TAN2,X,0
+    ESIZE,,1
+    LMESH,ALL
+*ENDDO
+! Cria reforços - não sei pq tem que fazer dois loops, em um só não funcinou (WTF)
+*DO,ii,1,ntrech
+    ! Pega materiais na matriz de armaduas
+    Ast   = ARMT(3, ii)
+    matId = ARMT(4, ii)
+
+    *IF,Ast,EQ,0,THEN
+        *CYCLE
+    *ENDIF
+
+    ! Aplica reforço na mesa superior
+    ESEL,S,MAT,,1
+    ESEL,R,CENT,Y,hmi+ha,hmi+ha+hms
+    ESEL,A,SEC,,(200+ii)
+    MAT,matId
+    EREINF
+    ! Aplica reforço na alma
+    ESEL,S,MAT,,1
+    ESEL,R,CENT,Y,hmi,hmi+ha
+    ESEL,A,SEC,,(300+ii)
+    MAT,matId
+    EREINF
+    ! Aplica reforço na mesa inferior
+    ESEL,S,MAT,,1
+    ESEL,R,CENT,Y,0,hmi
+    ESEL,A,SEC,,(400+ii)
+    MAT,matId
+    EREINF
+*ENDDO
+
+! Seleciona novamente todos elementos
+ALLSEL
+
+!================================================================
+
+
+!================================================================
+! Visualização:
+! Concreto translucido
+ESEL,S,TYPE,,1
+/TRLCY,ELEM,0.6
+ALLSEL
+!
+!/VIEW,1,1,2,3   
+!/ANG,1  
+/REP,FAST   
+/SHRINK,0   
+/ESHAPE,1   
+/EFACET,1   
+/RATIO,1,1,1
+/CFORMAT,32,0   
+/REPLOT 
+!================================================================
+
+
+!================================================================
+! Condições de contorno
+!
+! Apoio vertical em x=0
+NSEL,S,LOC,X,0
+NSEL,R,LOC,Y,0
+D,ALL,UY,0
+! Condição de simetria x=l
+NSEL,S,LOC,X,l
+D,ALL,UX,0
+!
+ALLSEL
+!================================================================
+
+
+!================================================================
+! Solver
+!
+/SOLU
+ANTYPE,0,NEW ! Análise do tipo estática
+NLGEOM,ON ! Não linearidade geométrica
+NROPT,FULL,,ON ! Newton Raphson completo
+LNSRCH,ON
+AUTOTS,ON ! Passo de carga automático
+ERESX,NO ! Copia os resultados dos pontos de integração para os nós
+PSCONTROL,ALL,ON ! Paralelização
+NCNV,2,3000,,,,
+OUTRES,ALL,ALL
+OUTRES,SVAR,ALL
+NSUBS,passos,passos,minpassos
+NEQIT,neq
+PRED,ldpred
+
+! Verifica se está aplicando carga concentrada
+*IF,TC,EQ,1,THEN
+    ! Um passo de carga até valF/4
+    TIME,1
+    NSUBS,passos1,passos1,minpassos1
+    CNVTOL,F,,tolerro1,2,tolerro1
+    CNVTOL,U,,tolerro1,2,tolerro1
+    ! Aplicando carga
+    NSEL,S,LOC,X,locC
+    NSEL,R,LOC,Y,h
+    F,ALL,FY,valF/4
+    LSWRITE,1
+
+    ! Outro passo de carga até valF
+    TIME,2
+    NSUBS,passos2,passos2,minpassos2
+    CNVTOL,F,,tolerro2,2,tolerro2
+    CNVTOL,U,,tolerro2,2,tolerro2
+    ! Aplicando carga
+    NSEL,S,LOC,X,locC
+    NSEL,R,LOC,Y,h
+    F,ALL,FY,valF
+    LSWRITE,2
+
+    LSSOLVE,1,2,1
+*ELSE
+! Aplicando apenas deslocamento
+    TIME,1
+    CNVTOL,F,,tolerro,2,tolerro
+    CNVTOL,U,,tolerro,2,tolerro
+    ! Aplicando carga
+    NSEL,S,LOC,X,locC
+    NSEL,R,LOC,Y,h
+    D,ALL,UY,valD
+    SOLVE
+*ENDIF
+
+
+!================================================================
+
+
+
+
+!================================================================
+! Salva fissuração
+*IF,relfis,EQ,1,THEN
+    ! Fecha arquivo
+    USR1
+*ENDIF
+!================================================================
+
+
+
+
+!================================================================
+! Curva Carga x Deslocamento
+!
+/POST26
+NUMVAR,200
+! Captura deslocamentos
+! Seleciona nó em que X=L
+NSEL,S,LOC,X,l
+*GET,NPONT,NODE,0,NUM,MIN
+ALLSEL
+NSOL,2,NPONT,U,Y
+! Inverte deslocamento (*-1)
+PROD,2,2,,,DESL,,,-1
+
+! Captura reação de apoio
+! Seleciona nó em que X=0
+NSEL,S,LOC,X,0
+NSEL,R,LOC,Y,0
+*GET,NPONT,NODE,0,NUM,MIN
+ALLSEL
+RFORCE,3,NPONT,F,Y
+! Multiplica reação por 2 pq está sendo usada simetria
+PROD,3,3,,,FORC,,,2
+
+! Deriva Força/Desloc
+DERIV,37,3,2,,DER,,,1,
+
+/AXLAB,Y,Forca
+/AXLAB,X,Deslocamento
+
+! Numero de linhas do printout
+LINES,10000
+
+! Printa Desl,Forca,Der
+PRVAR,2,3,37
+
+! Plota
+XVAR,2 
+PLVAR,3
+
+arqn='LW-ET3'
+expcsv,2,3
+figuras!,'LW-ET3'
+
+!================================================================
