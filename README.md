@@ -11,9 +11,15 @@ O algoritmo de fissuração foi reduzido para o estado plano podendo ter apenas 
 
 O algoritmo plástico foi muito alterado, foram criadas funções para determinar o numero de plasticidade `f` em função da superfície de ruptura e da regra de endurecimento (que são subrotinas), assim posso derivar `f` numéricamente e aplicar Newton-Raphoson + line search para encontrar a deformação de endurecimento (acredito que a deformação plástica equivalente tenha algum problema em sua formulação, mas isso foi ignorado e mantido igual aos demais trabalhos). O algoritmo plástico foi construído no estado plano, mas a maioria das funções depende apenas das tensões principais e invariantes de tensão, asssim considerando todas componentes nessas etapas o algoritmo deve funcionar em 3D. As propriedades do concreto são parametros determinados por rotinas adjacentes, então podem ser alteradas sem mexer no código principal, isso deve facilitar a consideração de visco e de problemas térmicos. 
 
+Existem alguns exemplos na pasta `apdls`, mas estão incompletos.
+
 .
 
-Recomendo usar o debbuger do VS para trabalhar com isso, [tutorial aqui](https://github.com/dutitello/debug-ansys-upf/)
+Para fazer download de todos os arquivos [clique aqui](https://github.com/dutitello/usermat-Titello/archive/master.zip).
+
+Recomendo ainda usar o debbuger do VS para trabalhar com isso, [tutorial aqui](https://github.com/dutitello/debug-ansys-upf/).
+
+.
 
 Boa sorte!
 
